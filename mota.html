@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>魔塔 v1.5.0</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #000;
+      overflow: hidden;
+      touch-action: none;
+      font-family: monospace;
+    }
+    canvas {
+      border: 2px solid #0f0;
+      width: 90vw;
+      height: 90vw;
+      max-width: 600px;
+      max-height: 600px;
+      cursor: pointer;
+    }
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 90%;
+      max-width: 300px;
+      justify-items: center;
+      align-items: center;
+    }
+    .control-btn {
+      width: 50px;
+      height: 50px;
+      background: #0f0;
+      border: 2px solid #0f0;
+      border-radius: 8px;
+      color: #000;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    #exit-btn {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 100px;
+      height: 40px;
+      background: #f00;
+      border: 2px solid #f00;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #status {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: #0f0;
+      font-size: 14px;
+      line-height: 1.4;
+      z-index: 10;
+      text-align: left;
+    }
+    #legend {
+      position: fixed;
+      top: 50px;
+      right: 10px;
+      color: #0f0;
+      font-size: 14px;
+      line-height: 1.6;
+      z-index: 10;
+      text-align: right;
+      background: rgba(0,0,0,0.6);
+      padding: 8px;
+      border: 1px solid #0f0;
+      border-radius: 4px;
+    }
+    #shop-menu {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #000;
+      border: 2px solid #0f0;
+      padding: 20px;
+      color: #0f0;
+      font-size: 14px;
+      line-height: 1.6;
+      z-index: 20;
+      display: none;
+      text-align: left;
+      width: 300px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .shop-item {
+      margin: 5px 0;
+      padding: 5px;
+      border: 1px solid #0f0;
+      cursor: pointer;
+    }
+    .shop-item:hover {
+      background: #0f0;
+      color: #000;
+    }
+    #shop-close {
+      margin-top: 10px;
+      padding: 5px;
+      background: #f00;
+      border: 1px solid #f00;
+      color: #fff;
+      text-align: center;
+      cursor: pointer;
+    }
+    #monster-info {
+      position: fixed;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      border: 2px solid #f0f;
+      padding: 10px;
+      color: #f0f;
+      font-size: 14px;
+      z-index: 15;
+      display: none;
+      text-align: center;
+      border-radius: 8px;
+    }
+    #alert-box {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      border: 2px solid #f00;
+      padding: 10px;
+      color: #f00;
+      font-size: 14px;
+      z-index: 25;
+      display: none;
+      text-align: center;
+      border-radius: 8px;
+      max-width: 80%;
+    }
+    @media (max-width: 600px) {
+      #status, #legend { font-size: 12px; }
+      canvas { width: 85vw; height: 85vw; }
+      #shop-menu { width: 80%; font-size: 12px; }
+      #monster-info { font-size: 12px; padding: 8px; bottom: 120px; }
+      #alert-box { font-size: 12px; bottom: 80px; }
+      #exit-btn { top: 5px; right: 5px; width: 80px; height: 35px; font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+  <div id="legend"></div>
+  <div id="monster-info"></div>
+  <div id="alert-box"></div>
+  <div id="controls">
+    <div class="control-btn" id="up">↑</div>
+    <div class="control-btn" id="left">←</div>
+    <div class="control-btn" id="right">→</div>
+    <div class="control-btn" id="down">↓</div>
+  </div>
+  <div id="exit-btn">退出冒险</div>
+  <div id="shop-menu">
+    <div id="shop-content"></div>
+    <div id="shop-close">关闭</div>
+  </div>
+
+  <script>
+    const GRID_SIZE = 11;
+    let cellSize;
+    let currentFloor = 1;
+    let highestFloor = parseInt(localStorage.getItem('highestFloor')) || 1;
+    let shopPurchases = JSON.parse(localStorage.getItem('shopPurchases')) || {
+      hp: 0, atk: 0, def: 0, yellow: 0, blue: 0, red: 0, reset: 0
+    };
+    let gameOver = false;
+    let bossDefeated = false;
+    let doorPos = null;
+    let bossPos = null;
+
+    let player = {
+      x: 1,
+      y: 1,
+      hp: 5000,
+      atk: 30,
+      def: 30,
+      gold: 0,
+      keys: { yellow: 0, blue: 0, red: 0 }
+    };
+
+    let maze = [];
+    let startPos = { x: 1, y: 1 };
+    let stairsPos = { x: 8, y: 1 };
+
+    const KEY_TYPES = ['yellow', 'blue', 'red'];
+    const KEY_WEIGHTS = { yellow: 4, blue: 2, red: 1 };
+    const MONSTER_TYPES = [
+      { baseHP: 50, baseATK: 15, baseDEF: 5 },
+      { baseHP: 80, baseATK: 25, baseDEF: 10 },
+      { baseHP: 120, baseATK: 35, baseDEF: 15 },
+      { baseHP: 160, baseATK: 45, baseDEF: 20 }
+    ];
+    const BOSS_SCALE = { hp: 5, atk: 1.5, def: 1.5 };
+    const SHOP_COST_BASE = {
+      hp: 20,
+      atk: 40,
+      def: 40,
+      yellow: 8,
+      blue: 15,
+      red: 25,
+      reset: 80
+    };
+
+    function setup() {
+      let size = min(windowWidth * 0.9, windowHeight * 0.7, 600);
+      createCanvas(size, size);
+      cellSize = width / GRID_SIZE;
+
+      document.getElementById('up').addEventListener('touchstart', (e) => { e.preventDefault(); if (!gameOver) movePlayer(0, -1); });
+      document.getElementById('down').addEventListener('touchstart', (e) => { e.preventDefault(); if (!gameOver) movePlayer(0, 1); });
+      document.getElementById('left').addEventListener('touchstart', (e) => { e.preventDefault(); if (!gameOver) movePlayer(-1, 0); });
+      document.getElementById('right').addEventListener('touchstart', (e) => { e.preventDefault(); if (!gameOver) movePlayer(1, 0); });
+      document.getElementById('exit-btn').addEventListener('click', () => {
+        if (confirm('确定退出冒险？')) {
+          gameOver = true;
+          showAlert('冒险结束！你的最高楼层：' + highestFloor);
+          setTimeout(() => window.location.reload(), 2000);
+        }
+      });
+
+      generateFloor();
+      updateStatus();
+      updateLegend();
+    }
+
+    function windowResized() {
+      let size = min(windowWidth * 0.9, windowHeight * 0.7, 600);
+      resizeCanvas(size, size);
+      cellSize = width / GRID_SIZE;
+    }
+
+    function weightedRandomKey() {
+      let total = KEY_WEIGHTS.yellow + KEY_WEIGHTS.blue + KEY_WEIGHTS.red;
+      let r = random(total);
+      if (r < KEY_WEIGHTS.yellow) return 'yellow';
+      if (r < KEY_WEIGHTS.yellow + KEY_WEIGHTS.blue) return 'blue';
+      return 'red';
+    }
+
+    function showAlert(message) {
+      let alertBox = document.getElementById('alert-box');
+      alertBox.innerHTML = message;
+      alertBox.style.display = 'block';
+      setTimeout(() => {
+        alertBox.style.display = 'none';
+      }, 3000);
+    }
+
+    function isReachable(sx, sy, ex, ey) {
+      let visited = Array.from({length: GRID_SIZE}, () => Array(GRID_SIZE).fill(false));
+      let queue = [[sx, sy]];
+      visited[sy][sx] = true;
+      while (queue.length > 0) {
+        let [cx, cy] = queue.shift();
+        if (cx === ex && cy === ey) return true;
+        let dirs = [[0,-1,0],[1,0,1],[0,1,2],[-1,0,3]];
+        for (let [dy, dx, wallIdx] of dirs) {
+          let nx = cx + dx;
+          let ny = cy + dy;
+          if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE && !visited[ny][nx] && !maze[cy][cx].walls[wallIdx]) {
+            visited[ny][nx] = true;
+            queue.push([nx, ny]);
+          }
+        }
+      }
+      return false;
+    }
+
+    function validateFloor() {
+      let hasStairs = false;
+      let stairsX, stairsY;
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (maze[y][x].type === 'stairs') {
+            hasStairs = true;
+            stairsX = x;
+            stairsY = y;
+            break;
+          }
+        }
+        if (hasStairs) break;
+      }
+      if (!hasStairs) return false;
+      if (!isReachable(startPos.x, startPos.y, stairsX, stairsY)) return false;
+      if (currentFloor % 10 === 0) {
+        if (!bossPos || maze[1][6].type !== 'boss') return false;
+        if (!doorPos || maze[1][7].type !== 'door' || !maze[1][7].requiresBoss) return false;
+        if (maze[1][3].type !== 'key') return false;
+        if (maze[1][8].type !== 'stairs') return false;
+      }
+      return true;
+    }
+
+    function generateFloor() {
+      maze = [];
+      bossDefeated = false;
+      bossPos = null;
+      doorPos = null;
+      let maxAttempts = 10;
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        maze = [];
+        for (let y = 0; y < GRID_SIZE; y++) {
+          maze[y] = [];
+          for (let x = 0; x < GRID_SIZE; x++) {
+            maze[y][x] = { walls: [false, false, false, false], visited: false, type: 'floor' };
+          }
+        }
+
+        function carve(x, y) {
+          maze[y][x].visited = true;
+          let directions = shuffle([[0, -1], [1, 0], [0, 1], [-1, 0]]);
+          for (let [dx, dy] of directions) {
+            let nx = x + dx;
+            let ny = y + dy;
+            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE && !maze[ny][nx].visited) {
+              if (dx === 1) {
+                maze[y][x].walls[1] = false;
+                maze[ny][nx].walls[3] = false;
+              } else if (dx === -1) {
+                maze[y][x].walls[3] = false;
+                maze[ny][nx].walls[1] = false;
+              } else if (dy === 1) {
+                maze[y][x].walls[2] = false;
+                maze[ny][nx].walls[0] = false;
+              } else if (dy === -1) {
+                maze[y][x].walls[0] = false;
+                maze[ny][nx].walls[2] = false;
+              }
+              carve(nx, ny);
+            }
+          }
+        }
+
+        startPos = { x: 1, y: 1 };
+        if (currentFloor % 10 === 0) {
+          // BOSS层：无墙，固定路径
+          let path = [
+            [1,1], [2,1], [3,1], [4,1], [5,1], [6,1], [7,1], [8,1]
+          ];
+
+          // 放置钥匙
+          maze[1][3].type = 'key';
+          maze[1][3].color = weightedRandomKey();
+
+          // 放置BOSS
+          bossPos = { x: 6, y: 1 };
+          let mt = MONSTER_TYPES[MONSTER_TYPES.length - 1];
+          let scale = 1 + (currentFloor - 1) * 0.0125;
+          maze[1][6].type = 'boss';
+          maze[1][6].hp = floor(mt.baseHP * scale * BOSS_SCALE.hp);
+          maze[1][6].atk = floor(mt.baseATK * scale * BOSS_SCALE.atk);
+          maze[1][6].def = floor(mt.baseDEF * scale * BOSS_SCALE.def);
+          maze[1][6].gold = 50 + floor(random(50)) * currentFloor;
+
+          // 放置门
+          doorPos = { x: 7, y: 1 };
+          maze[1][7].type = 'door';
+          maze[1][7].color = maze[1][3].color;
+          maze[1][7].requiresBoss = true;
+
+          // 放置楼梯
+          stairsPos = { x: 8, y: 1 };
+          maze[1][8].type = 'stairs';
+        } else {
+          // 普通层：迷宫
+          for (let y = 0; y < GRID_SIZE; y++) {
+            for (let x = 0; x < GRID_SIZE; x++) {
+              maze[y][x].walls = [true, true, true, true];
+            }
+          }
+          stairsPos = { x: GRID_SIZE - 2, y: GRID_SIZE - 2 };
+          maze[startPos.y][startPos.x].walls = [false, false, false, false];
+          carve(0, 0);
+          let extraConnections = 4 + floor(random(4));
+          for (let i = 0; i < extraConnections; i++) {
+            let x = floor(random(1, GRID_SIZE - 1));
+            let y = floor(random(1, GRID_SIZE - 1));
+            let dirs = shuffle([[0, -1], [1, 0], [0, 1], [-1, 0]]);
+            for (let [dx, dy] of dirs) {
+              let nx = x + dx;
+              let ny = y + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                let wallIdx = dy === -1 ? 0 : dy === 1 ? 2 : dx === -1 ? 3 : 1;
+                if (maze[y][x].walls[wallIdx]) {
+                  maze[y][x].walls[wallIdx] = false;
+                  if (dy === -1) maze[ny][nx].walls[2] = false;
+                  else if (dy === 1) maze[ny][nx].walls[0] = false;
+                  else if (dx === -1) maze[ny][nx].walls[1] = false;
+                  else if (dx === 1) maze[ny][nx].walls[3] = false;
+                  break;
+                }
+              }
+            }
+          }
+          maze[stairsPos.y][stairsPos.x] = { walls: [false, false, false, false], type: 'stairs' };
+        }
+
+        let protectedTiles = currentFloor % 10 === 0 ? [[1,1], [3,1], [6,1], [7,1], [8,1]] : [[1,1], [stairsPos.x, stairsPos.y]];
+        let allFloors = [];
+        for (let y = 0; y < GRID_SIZE; y++) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            if ((maze[y][x].type === 'floor' || maze[y][x].type === 'stairs') &&
+                !protectedTiles.some(([px, py]) => px === x && py === y)) {
+              allFloors.push([x, y]);
+            }
+          }
+        }
+
+        let pathTiles = getPathTiles();
+        if (currentFloor % 10 !== 0 && pathTiles.length < 10) {
+          attempts++;
+          continue;
+        }
+
+        // 门+钥匙+金币（非BOSS层）
+        let doorCount = currentFloor % 10 === 0 ? 0 : 2 + floor(random(2));
+        for (let i = 0; i < doorCount && pathTiles.length >= 6; i++) {
+          let idx = floor(random(3, pathTiles.length - 6));
+          let [dx, dy] = pathTiles.splice(idx, 1)[0];
+          let color = weightedRandomKey();
+          maze[dy][dx].type = 'door';
+          maze[dy][dx].color = color;
+
+          let nearby = getNearbyTiles(dx, dy, pathTiles, 3);
+          if (nearby.length > 0) {
+            let [kx, ky] = nearby.splice(floor(random(nearby.length)), 1)[0];
+            maze[ky][kx].type = 'key';
+            maze[ky][kx].color = color;
+            pathTiles = removeFromPath(pathTiles, kx, ky);
+
+            if (nearby.length > 0) {
+              let [gx, gy] = nearby.splice(floor(random(nearby.length)), 1)[0];
+              maze[gy][gx].type = 'gold';
+              maze[gy][gx].amount = 20 + floor(random(20)) * currentFloor;
+              pathTiles = removeFromPath(pathTiles, gx, gy);
+            }
+          }
+        }
+
+        // 怪物
+        let monsterCount = currentFloor % 10 === 0 ? 2 + floor(random(2)) : 3 + floor(random(3)) + floor((currentFloor - 1) / 10);
+        let placedMonsters = [];
+        for (let i = 0; i < monsterCount; i++) {
+          let validTiles = allFloors.filter(([x, y]) => {
+            return maze[y][x].type === 'floor' &&
+                   placedMonsters.every(([mx, my]) => abs(x - mx) + abs(y - my) >= 3) &&
+                   !protectedTiles.some(([px, py]) => px === x && py === y);
+          });
+          if (validTiles.length === 0) break;
+          let idx = floor(random(validTiles.length));
+          let [mx, my] = validTiles.splice(idx, 1)[0];
+          allFloors = allFloors.filter(([x, y]) => x !== mx || y !== my);
+          placedMonsters.push([mx, my]);
+
+          let mt = MONSTER_TYPES[floor(random(MONSTER_TYPES.length))];
+          let scale = 1 + (currentFloor - 1) * 0.0125;
+          maze[my][mx].type = 'monster';
+          maze[my][mx].hp = floor(mt.baseHP * scale);
+          maze[my][mx].atk = floor(mt.baseATK * scale);
+          maze[my][mx].def = floor(mt.baseDEF * scale);
+          maze[my][mx].gold = 10 + floor(random(15)) * currentFloor;
+
+          let nearby = getNearbyTiles(mx, my, allFloors, 2);
+          if (nearby.length > 0 && random() < 0.8) {
+            let [ix, iy] = nearby.splice(floor(random(nearby.length)), 1)[0];
+            if (random() < 0.7) {
+              maze[iy][ix].type = 'gold';
+              maze[iy][ix].amount = 20 + floor(random(20)) * currentFloor;
+            } else {
+              maze[iy][ix].type = 'key';
+              maze[iy][ix].color = weightedRandomKey();
+            }
+            allFloors = allFloors.filter(([x, y]) => x !== ix || y !== iy);
+          }
+        }
+
+        // 额外金币/钥匙
+        let extraCount = 3 + floor(random(3));
+        for (let i = 0; i < extraCount && allFloors.length > 0; i++) {
+          let idx = floor(random(allFloors.length));
+          let [gx, gy] = allFloors.splice(idx, 1)[0];
+          if (protectedTiles.some(([px, py]) => px === gx && py === gy)) continue;
+          if (random() < 0.7) {
+            maze[gy][gx].type = 'gold';
+            maze[gy][gx].amount = 20 + floor(random(20)) * currentFloor;
+          } else {
+            maze[gy][gx].type = 'key';
+            maze[gy][gx].color = weightedRandomKey();
+          }
+        }
+
+        // 放置商店
+        shuffle(allFloors);
+        let shopPlaced = false;
+        for (let [sx, sy] of allFloors) {
+          if (maze[sy][sx].type !== 'floor' || protectedTiles.some(([px, py]) => px === sx && py === sy)) continue;
+          maze[sy][sx].type = 'shop';
+          shopPlaced = true;
+          break;
+        }
+        if (!shopPlaced && allFloors.length > 0) {
+          let valid = allFloors.find(([x, y]) => maze[y][x].type === 'floor' && !protectedTiles.some(([px, py]) => px === x && py === y));
+          if (valid) maze[valid[1]][valid[0]].type = 'shop';
+        }
+
+        // 验证楼层
+        if (validateFloor()) {
+          player.x = startPos.x;
+          player.y = startPos.y;
+          return;
+        }
+        attempts++;
+      }
+
+      // 后备方案：极简BOSS层或普通层
+      maze = [];
+      for (let y = 0; y < GRID_SIZE; y++) {
+        maze[y] = [];
+        for (let x = 0; x < GRID_SIZE; x++) {
+          maze[y][x] = { walls: [false, false, false, false], visited: false, type: 'floor' };
+        }
+      }
+      maze[1][1].type = 'floor';
+      if (currentFloor % 10 === 0) {
+        maze[1][3].type = 'key';
+        maze[1][3].color = 'yellow';
+        bossPos = { x: 6, y: 1 };
+        let mt = MONSTER_TYPES[MONSTER_TYPES.length - 1];
+        let scale = 1 + (currentFloor - 1) * 0.05;
+        maze[1][6].type = 'boss';
+        maze[1][6].hp = floor(mt.baseHP * scale * BOSS_SCALE.hp);
+        maze[1][6].atk = floor(mt.baseATK * scale * BOSS_SCALE.atk);
+        maze[1][6].def = floor(mt.baseDEF * scale * BOSS_SCALE.def);
+        maze[1][6].gold = 50 + floor(random(50)) * currentFloor;
+        doorPos = { x: 7, y: 1 };
+        maze[1][7].type = 'door';
+        maze[1][7].color = 'yellow';
+        maze[1][7].requiresBoss = true;
+        stairsPos = { x: 8, y: 1 };
+        maze[1][8].type = 'stairs';
+      } else {
+        stairsPos = { x: 8, y: 1 };
+        maze[1][8].type = 'stairs';
+      }
+      player.x = startPos.x;
+      player.y = startPos.y;
+    }
+
+    function getNearbyTiles(x, y, pathTiles, maxDist) {
+      return pathTiles.filter(([px, py]) => {
+        let dist = abs(px - x) + abs(py - y);
+        return dist > 0 && dist <= maxDist;
+      });
+    }
+
+    function removeFromPath(pathTiles, rx, ry) {
+      return pathTiles.filter(([px, py]) => px !== rx || py !== ry);
+    }
+
+    function getPathTiles() {
+      let visited = Array.from({length: GRID_SIZE}, () => Array(GRID_SIZE).fill(false));
+      let queue = [[startPos.x, startPos.y]];
+      let parent = {};
+      visited[startPos.y][startPos.x] = true;
+
+      while (queue.length > 0) {
+        let [cx, cy] = queue.shift();
+        if (maze[cy][cx].type === 'stairs') {
+          let path = [];
+          let cur = {x: cx, y: cy};
+          while (cur) {
+            path.push([cur.x, cur.y]);
+            cur = parent[`${cur.x},${cur.y}`];
+          }
+          return path.reverse().slice(1, -1);
+        }
+        let dirs = [[0,-1,0],[1,0,1],[0,1,2],[-1,0,3]];
+        for (let [dy, dx, wallIdx] of dirs) {
+          let nx = cx + dx;
+          let ny = cy + dy;
+          if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE && !visited[ny][nx] && !maze[cy][cx].walls[wallIdx]) {
+            visited[ny][nx] = true;
+            queue.push([nx, ny]);
+            parent[`${nx},${ny}`] = {x: cx, y: cy};
+          }
+        }
+      }
+      return [];
+    }
+
+    function draw() {
+      if (gameOver) return;
+      background(0);
+
+      stroke(0, 255, 0);
+      strokeWeight(3);
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          let cx = x * cellSize;
+          let cy = y * cellSize;
+          let cell = maze[y][x];
+
+          if (cell.walls[0]) line(cx, cy, cx + cellSize, cy);
+          if (cell.walls[1]) line(cx + cellSize, cy, cx + cellSize, cy + cellSize);
+          if (cell.walls[2]) line(cx, cy + cellSize, cx + cellSize, cy + cellSize);
+          if (cell.walls[3]) line(cx, cy, cx, cy + cellSize);
+        }
+      }
+
+      noStroke();
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          let cx = x * cellSize;
+          let cy = y * cellSize;
+          let cell = maze[y][x];
+
+          if (cell.type === 'door') {
+            fill(cell.color === 'yellow' ? '#ff0' : cell.color === 'blue' ? '#00f' : '#f00');
+            rect(cx + 8, cy + 8, cellSize - 16, cellSize - 16);
+          } else if (cell.type === 'key') {
+            fill(cell.color === 'yellow' ? '#ff0' : cell.color === 'blue' ? '#00f' : '#f00');
+            ellipse(cx + cellSize/2, cy + cellSize/2, cellSize * 0.6);
+          } else if (cell.type === 'monster') {
+            fill(255, 0, 255);
+            rect(cx + 10, cy + 10, cellSize - 20, cellSize - 20);
+          } else if (cell.type === 'boss') {
+            fill(255, 0, 255);
+            rect(cx + 5, cy + 5, cellSize - 10, cellSize - 10);
+            fill(255, 255, 0);
+            textAlign(CENTER, CENTER);
+            textSize(cellSize * 0.5);
+            text('B', cx + cellSize/2, cy + cellSize/2);
+          } else if (cell.type === 'gold') {
+            fill(255, 215, 0);
+            ellipse(cx + cellSize/2, cy + cellSize/2, cellSize * 0.6);
+          } else if (cell.type === 'shop') {
+            fill(0, 255, 255);
+            textAlign(CENTER, CENTER);
+            textSize(cellSize * 0.7);
+            text('$', cx + cellSize/2, cy + cellSize/2);
+          } else if (cell.type === 'stairs') {
+            fill(255, 100, 100);
+            triangle(cx + cellSize*0.2, cy + cellSize*0.8,
+                     cx + cellSize*0.8, cy + cellSize*0.8,
+                     cx + cellSize/2, cy + cellSize*0.2);
+          }
+        }
+      }
+
+      noStroke();
+      fill(0, 255, 0);
+      ellipse(player.x * cellSize + cellSize/2, player.y * cellSize + cellSize/2, cellSize * 0.8);
+      fill(0);
+      ellipse(player.x * cellSize + cellSize/2 - cellSize*0.15, player.y * cellSize + cellSize/2 - cellSize*0.1, cellSize*0.15);
+      ellipse(player.x * cellSize + cellSize/2 + cellSize*0.15, player.y * cellSize + cellSize/2 - cellSize*0.1, cellSize*0.15);
+      arc(player.x * cellSize + cellSize/2, player.y * cellSize + cellSize/2 + cellSize*0.1, cellSize*0.4, cellSize*0.3, 0, PI);
+    }
+
+    function mousePressed() {
+      if (gameOver) return;
+      let mx = floor(mouseX / cellSize);
+      let my = floor(mouseY / cellSize);
+      if (mx >= 0 && mx < GRID_SIZE && my >= 0 && my < GRID_SIZE) {
+        let cell = maze[my][mx];
+        if (cell.type === 'monster' || cell.type === 'boss') {
+          document.getElementById('monster-info').innerHTML = `
+            ${cell.type === 'boss' ? 'BOSS' : '怪物'}信息<br>
+            生命: ${cell.hp}<br>
+            攻击: ${cell.atk}<br>
+            防御: ${cell.def}<br>
+            金币: ${cell.gold}
+          `;
+          document.getElementById('monster-info').style.display = 'block';
+          setTimeout(() => {
+            document.getElementById('monster-info').style.display = 'none';
+          }, 3000);
+        }
+      }
+    }
+
+    function touchStarted() {
+      mousePressed();
+      return false;
+    }
+
+    function showShopMenu() {
+      let costScale = 1 + 0.1 * (
+        shopPurchases.hp + shopPurchases.atk + shopPurchases.def +
+        shopPurchases.yellow + shopPurchases.blue + shopPurchases.red + shopPurchases.reset
+      );
+      let costs = {
+        hp: floor(SHOP_COST_BASE.hp * currentFloor * costScale),
+        atk: floor(SHOP_COST_BASE.atk * currentFloor * costScale),
+        def: floor(SHOP_COST_BASE.def * currentFloor * costScale),
+        yellow: floor(SHOP_COST_BASE.yellow * currentFloor * costScale),
+        blue: floor(SHOP_COST_BASE.blue * currentFloor * costScale),
+        red: floor(SHOP_COST_BASE.red * currentFloor * costScale),
+        reset: floor(SHOP_COST_BASE.reset * currentFloor * costScale)
+      };
+
+      let shopContent = document.getElementById('shop-content');
+      shopContent.innerHTML = `
+        商店（价格随购买次数增长）<br>
+        <div class="shop-item" data-action="hp">1. 生命 +200 (${costs.hp} 金币)</div>
+        <div class="shop-item" data-action="atk">2. 攻击 +8 (${costs.atk} 金币)</div>
+        <div class="shop-item" data-action="def">3. 防御 +8 (${costs.def} 金币)</div>
+        <div class="shop-item" data-action="yellow">4. 黄钥匙 +1 (${costs.yellow} 金币)</div>
+        <div class="shop-item" data-action="blue">5. 蓝钥匙 +1 (${costs.blue} 金币)</div>
+        <div class="shop-item" data-action="red">6. 红钥匙 +1 (${costs.red} 金币)</div>
+        <div class="shop-item" data-action="reset">7. 重置本层 (${costs.reset} 金币)</div>
+      `;
+      document.getElementById('shop-menu').style.display = 'block';
+
+      let items = shopContent.getElementsByClassName('shop-item');
+      for (let item of items) {
+        item.onclick = () => {
+          let action = item.getAttribute('data-action');
+          let cost = costs[action];
+          if (player.gold < cost) {
+            showAlert(`金币不足！需要 ${cost} 金币，当前有 ${player.gold} 金币。`);
+            return;
+          }
+          if (action === 'hp') {
+            player.hp += 200;
+            player.gold -= cost;
+            shopPurchases.hp++;
+          } else if (action === 'atk') {
+            player.atk += 8;
+            player.gold -= cost;
+            shopPurchases.atk++;
+          } else if (action === 'def') {
+            player.def += 8;
+            player.gold -= cost;
+            shopPurchases.def++;
+          } else if (action === 'yellow') {
+            player.keys.yellow++;
+            player.gold -= cost;
+            shopPurchases.yellow++;
+          } else if (action === 'blue') {
+            player.keys.blue++;
+            player.gold -= cost;
+            shopPurchases.blue++;
+          } else if (action === 'red') {
+            player.keys.red++;
+            player.gold -= cost;
+            shopPurchases.red++;
+          } else if (action === 'reset') {
+            player.gold -= cost;
+            shopPurchases.reset++;
+            generateFloor();
+            updateStatus();
+            localStorage.setItem('shopPurchases', JSON.stringify(shopPurchases));
+            document.getElementById('shop-menu').style.display = 'none';
+            return;
+          }
+          localStorage.setItem('shopPurchases', JSON.stringify(shopPurchases));
+          updateStatus();
+          showShopMenu();
+        };
+      }
+
+      document.getElementById('shop-close').onclick = () => {
+        document.getElementById('shop-menu').style.display = 'none';
+      };
+    }
+
+    function movePlayer(dx, dy) {
+      if (gameOver) return;
+      let nx = player.x + dx;
+      let ny = player.y + dy;
+      if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) return;
+
+      let dirIdx;
+      if (dx === 1) dirIdx = 1;
+      else if (dx === -1) dirIdx = 3;
+      else if (dy === 1) dirIdx = 2;
+      else if (dy === -1) dirIdx = 0;
+
+      if (maze[player.y][player.x].walls[dirIdx]) return;
+
+      let tile = maze[ny][nx];
+
+      if (tile.type === 'stairs' && currentFloor % 10 === 0) {
+        if (!bossDefeated) {
+          showAlert('必须先击败BOSS才能上楼！');
+          return;
+        }
+        if (doorPos && maze[doorPos.y][doorPos.x].type === 'door') {
+          showAlert('必须先通过BOSS后的门才能上楼！');
+          return;
+        }
+      }
+
+      if (tile.type === 'boss') {
+        let dmgToMon = max(0, player.atk - tile.def);
+        let dmgToPlayer = max(0, tile.atk - player.def);
+        if (dmgToMon === 0) {
+          showAlert('你的攻击无法伤害BOSS！');
+          return;
+        }
+        let turns = ceil(tile.hp / dmgToMon);
+        let totalDmg = (turns - 1) * dmgToPlayer;
+        if (player.hp <= totalDmg) {
+          gameOver = true;
+          showAlert('你被BOSS打败了！最高楼层：' + highestFloor);
+          setTimeout(() => window.location.reload(), 2000);
+          return;
+        }
+        player.hp -= totalDmg;
+        player.gold += tile.gold;
+        bossDefeated = true;
+        tile.type = 'floor';
+        player.x = nx;
+        player.y = ny;
+        updateStatus();
+        return;
+      }
+
+      if (tile.type === 'door') {
+        if (tile.requiresBoss && !bossDefeated) {
+          showAlert('必须先击败BOSS才能开启此门！');
+          return;
+        }
+        if (player.keys[tile.color] > 0) {
+          player.keys[tile.color]--;
+          tile.type = 'floor';
+        } else {
+          showAlert(`需要${tile.color === 'yellow' ? '黄色' : tile.color === 'blue' ? '蓝色' : '红色'}钥匙！`);
+          return;
+        }
+      }
+
+      if (tile.type === 'monster') {
+        let dmgToMon = max(0, player.atk - tile.def);
+        let dmgToPlayer = max(0, tile.atk - player.def);
+        if (dmgToMon === 0) {
+          showAlert('你的攻击无法伤害怪物！');
+          return;
+        }
+        let turns = ceil(tile.hp / dmgToMon);
+        let totalDmg = (turns - 1) * dmgToPlayer;
+        if (player.hp <= totalDmg) {
+          gameOver = true;
+          showAlert('你被怪物打败了！最高楼层：' + highestFloor);
+          setTimeout(() => window.location.reload(), 2000);
+          return;
+        }
+        player.hp -= totalDmg;
+        player.gold += tile.gold;
+        tile.type = 'floor';
+      }
+
+      if (tile.type === 'key') {
+        player.keys[tile.color]++;
+        tile.type = 'floor';
+      }
+
+      if (tile.type === 'gold') {
+        player.gold += tile.amount;
+        tile.type = 'floor';
+      }
+
+      if (tile.type === 'shop') {
+        player.x = nx;
+        player.y = ny;
+        showShopMenu();
+        updateStatus();
+        return;
+      }
+
+      if (tile.type === 'stairs') {
+        currentFloor++;
+        if (currentFloor > highestFloor) {
+          highestFloor = currentFloor;
+          localStorage.setItem('highestFloor', highestFloor);
+        }
+        generateFloor();
+        updateStatus();
+        return;
+      }
+
+      player.x = nx;
+      player.y = ny;
+      updateStatus();
+    }
+
+    function keyPressed() {
+      if (gameOver) return;
+      if (keyCode === UP_ARROW) movePlayer(0, -1);
+      if (keyCode === DOWN_ARROW) movePlayer(0, 1);
+      if (keyCode === LEFT_ARROW) movePlayer(-1, 0);
+      if (keyCode === RIGHT_ARROW) movePlayer(1, 0);
+    }
+
+    function updateStatus() {
+      document.getElementById('status').innerHTML = `
+        第 ${currentFloor} 层${currentFloor % 10 === 0 ? ' [BOSS]' : ''}<br>
+        最高层: ${highestFloor}<br>
+        生命: ${player.hp}<br>
+        攻击: ${player.atk}　防御: ${player.def}<br>
+        金币: ${player.gold}<br>
+        黄钥: ${player.keys.yellow}　蓝钥: ${player.keys.blue}　红钥: ${player.keys.red}
+      `;
+    }
+
+    function updateLegend() {
+      document.getElementById('legend').innerHTML = `
+        图例：<br>
+        <span style="color:#0f0">●</span> 你<br>
+        <span style="color:#ff0">■</span> 黄门　<span style="color:#ff0">●</span> 黄钥<br>
+        <span style="color:#00f">■</span> 蓝门　<span style="color:#00f">●</span> 蓝钥<br>
+        <span style="color:#f00">■</span> 红门　<span style="color:#f00">●</span> 红钥<br>
+        <span style="color:#f0f">■</span> 怪物/BOSS（点击查看属性）<br>
+        <span style="color:#ffd700">●</span> 金币<br>
+        <span style="color:#0ff">$</span> 商店<br>
+        <span style="color:#f66">▲</span> 上楼
+      `;
+    }
+
+    function shuffle(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        let j = floor(random(i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+  </script>
+</body>
+</html>
